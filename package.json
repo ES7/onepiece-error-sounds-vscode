@@ -1,0 +1,42 @@
+{
+  "name": "onepiece-error-sounds",
+  "displayName": "One Piece Error Sounds",
+  "description": "Play One Piece Haki sounds based on error severity",
+  "version": "0.0.1",
+  "publisher": "ebad-ai",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "enabledApiProposals": ["terminalDataWriteEvent"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "onepieceErrors.test",
+        "title": "One Piece: Test Sounds"
+      }
+    ],
+    "configuration": {
+      "title": "One Piece Error Sounds",
+      "properties": {
+        "onepieceErrors.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable/disable One Piece error sounds"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.3.0"
+  }
+}
