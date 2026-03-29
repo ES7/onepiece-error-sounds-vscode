@@ -32,6 +32,7 @@ onepiece-error-sounds-vscode/
 │    └── shanks.wav           # Fatal sound
 ├── src/
 │    └── extension.ts         # Main extension logic
+│    └── types.d.ts           # Type declarations for external modules
 ├── package.json              # Extension manifest & metadata
 ├── package-lock.json         # Dependency lock file
 └── tsconfig.json             # TypeScript compiler config
@@ -88,6 +89,56 @@ npm run compile
 
 A new VS Code window will open with the extension active. Test it from there.
 
+---
+
+### Build & Install as VSIX — For Daily Use
+ 
+If you want to install the extension permanently (or share it), build a `.vsix` package.
+ 
+**Step 1 — Install vsce (VS Code Extension packager):**
+```bash
+npm install -g @vscode/vsce
+```
+ 
+**Step 2 — Compile and package:**
+```bash
+npm run compile
+vsce package
+```
+ 
+This creates `onepiece-error-sounds-0.0.1.vsix` in your project folder.
+ 
+**Step 3 — Install in VS Code:**
+```
+Ctrl+Shift+P → "Extensions: Install from VSIX" → select the .vsix file
+```
+ 
+Or via terminal:
+```bash
+code --install-extension onepiece-error-sounds-0.0.1.vsix
+```
+ 
+> ⚠️ **Note:** VSIX mode uses exit code detection only (not terminal text). For full keyword-based classification, use F5 dev mode.
+ 
+---
+ 
+### Made Changes? Rebuild Like This:
+ 
+```bash
+# 1. Make your changes in src/extension.ts
+ 
+# 2. Recompile
+npm run compile
+ 
+# 3. Repackage
+vsce package
+ 
+# 4. Reinstall
+code --install-extension onepiece-error-sounds-0.0.1.vsix
+ 
+# 5. Restart VS Code
+```
+ 
 ---
 
 ## 🧪 Testing the Sounds
