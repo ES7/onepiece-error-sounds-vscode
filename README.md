@@ -188,7 +188,7 @@ Terminal text reading uses a **proposed API** (`terminalDataWriteEvent`) which o
 ## 📄 Article
 
 Read the full build journey, bugs faced, and lessons learned:
-👉 [Medium Article](#) *(link coming soon)*
+👉 [Medium Article](https://medium.com/@sayedebad.777/i-built-a-vs-code-extension-that-plays-one-piece-sounds-on-errors-heres-everything-i-learned-3b3673225432)
 
 ---
 
