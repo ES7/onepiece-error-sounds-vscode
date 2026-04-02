@@ -5,6 +5,8 @@ import * as fs from 'fs';
 let lastPlayedTime = 0;
 const COOLDOWN = 3000;
 
+// ─── Sound Player ─────────────────────────────────────────────────────────────
+
 function playSound(filePath: string, label: string) {
     const now = Date.now();
     if (now - lastPlayedTime < COOLDOWN) return;
@@ -24,15 +26,74 @@ function playSound(filePath: string, label: string) {
     });
 }
 
-function classify(text: string): 'shanks' | 'katakuri' | 'luffy' | null {
-    const t = text.toLowerCase();
-    if (t.includes('fatal') || t.includes('critical') || t.includes('panic')) return 'shanks';
-    if (t.includes('error') || t.includes('failed') || t.includes('not recognized') || t.includes('cannot') || t.includes('exception') || t.includes('commandnotfound')) return 'katakuri';
-    if (t.includes('warning') || t.includes('warn') || t.includes('deprecated')) return 'luffy';
-    return null;
+// ─── Command Classifier ───────────────────────────────────────────────────────
+
+// 🔴 SHANKS — Infrastructure / DevOps / System level
+// Server down, cluster issue, infra broke = most dangerous
+const SHANKS_COMMANDS = [
+    'docker', 'docker-compose',
+    'kubectl', 'terraform', 'ansible', 'helm',
+    'kill', 'taskkill', 'shutdown', 'reboot',
+];
+
+// 🟡 KATAKURI — Code / Build / Test failures
+// Build broke, tests failed, compile error = medium severity
+const KATAKURI_COMMANDS = [
+    // JavaScript / Node
+    'node', 'npm', 'npx', 'yarn', 'pnpm', 'bun',
+    'jest', 'vitest', 'mocha', 'jasmine', 'cypress', 'playwright',
+    // TypeScript
+    'tsc', 'ts-node',
+    // Python
+    'python', 'python3', 'pip', 'pip3', 'pytest', 'poetry', 'pipenv',
+    'uvicorn', 'gunicorn', 'flask', 'django-admin',
+    // Rust
+    'cargo', 'rustc',
+    // Go
+    'go',
+    // Java / JVM
+    'java', 'javac', 'mvn', 'gradle', 'kotlin',
+    // C / C++
+    'gcc', 'g++', 'clang', 'make', 'cmake',
+    // Git
+    'git',
+    // Build tools
+    'vite', 'webpack', 'rollup', 'esbuild', 'parcel',
+    // Testing
+    'dotnet', 'phpunit', 'rspec', 'flutter',
+    // Package managers
+    'composer', 'gem', 'bundle',
+    // Database
+    'psql', 'mysql', 'mongo',
+    // Shell scripts
+    'bash', 'sh',
+];
+
+// 🟢 LUFFY — Everything else
+// Unknown commands, typos, minor mistakes = easy/recoverable
+
+function classifyCommand(cmd: string): 'shanks' | 'katakuri' | 'luffy' {
+    if (!cmd) return 'luffy';
+
+    // Extract base command — first word, strip full path
+    const baseCmd = cmd.trim().toLowerCase().split(/\s+/)[0].replace(/^.*[/\\]/, '');
+
+    for (const s of SHANKS_COMMANDS) {
+        if (baseCmd === s) return 'shanks';
+    }
+
+    for (const k of KATAKURI_COMMANDS) {
+        if (baseCmd === k) return 'katakuri';
+    }
+
+    // Unknown command = Luffy
+    return 'luffy';
 }
 
+// ─── Activate ─────────────────────────────────────────────────────────────────
+
 export function activate(context: vscode.ExtensionContext) {
+
     const sounds = {
         luffy:    context.asAbsolutePath('media/luffy.wav'),
         katakuri: context.asAbsolutePath('media/katakuri.wav'),
@@ -45,92 +106,32 @@ export function activate(context: vscode.ExtensionContext) {
         playSound(sounds[level], level);
     }
 
-    // Tracks what the terminal text listener already classified
-    // So exit code listener doesn't override it
-    let lastTerminalLevel: 'shanks' | 'katakuri' | 'luffy' | null = null;
-    let lastTerminalTime = 0;
-
-    // ── 1. Terminal text listener (proposed API, F5 mode) ─────────────────────
-    const onDidWriteTerminalData = (vscode.window as any).onDidWriteTerminalData;
-    if (typeof onDidWriteTerminalData === 'function') {
-        console.log('[One Piece] ✅ Terminal data API available');
-        let buffer = '';
-        let collecting = false;
-
-        context.subscriptions.push(
-            onDidWriteTerminalData((e: any) => {
-                const raw = e.data;
-
-                if (raw.includes('\u001b]633;C')) {
-                    collecting = true;
-                    buffer = '';
-                }
-
-                if (collecting && !raw.includes('\u001b]633;C') && !raw.includes('\u001b]633;D')) {
-                    buffer += raw;
-                }
-
-                if (collecting && raw.includes('\u001b]633;C')) {
-                    const afterC = raw.split('\u001b]633;C')[1] || '';
-                    if (afterC) buffer += afterC;
-                }
-
-                if (raw.includes('\u001b]633;D')) {
-                    collecting = false;
-                    const beforeD = raw.split('\u001b]633;D')[0] || '';
-                    if (beforeD && !beforeD.includes('\u001b]633;C')) buffer += beforeD;
-
-                    const clean = buffer
-                        .replace(/\x1B\[[0-9;?]*[a-zA-Z]/g, '')
-                        .replace(/\x1B\][^\x07]*\x07/g, '')
-                        .replace(/\r\n|\r|\n/g, ' ')
-                        .trim();
-                    buffer = '';
-
-                    if (!clean) return;
-
-                    console.log(`[One Piece] Terminal: "${clean.substring(0, 100)}"`);
-                    const level = classify(clean);
-
-                    // Save what text listener found — exit code listener will respect this
-                    lastTerminalLevel = level;
-                    lastTerminalTime = Date.now();
-
-                    if (level) trigger(level);
-                }
-            })
-        );
-    }
-
-    // ── 2. Exit code listener ─────────────────────────────────────────────────
-    // Only fires if text listener didn't already handle it
+    // ── 1. Shell execution listener (STABLE API) ──────────────────────────────
+    // Fires when terminal command finishes
+    // Check: what command ran + exit code != 0 = play sound
     const onDidEndTerminalShellExecution = (vscode.window as any).onDidEndTerminalShellExecution;
+
     if (typeof onDidEndTerminalShellExecution === 'function') {
-        console.log('[One Piece] ✅ Shell exit code API available');
+        console.log('[One Piece] ✅ Shell integration API available');
         context.subscriptions.push(
             onDidEndTerminalShellExecution((e: any) => {
                 const exitCode = e.exitCode;
-                console.log(`[One Piece] Exit code: ${exitCode}`);
+                const cmd = e.execution?.commandLine?.value ?? '';
+
+                console.log(`[One Piece] "${cmd}" → exit: ${exitCode}`);
+
                 if (exitCode === undefined || exitCode === 0) return;
 
-                // Wait 800ms so text listener can classify first
-                // Text classification is more accurate (fatal=shanks, error=katakuri etc)
-                setTimeout(() => {
-                    // If text listener classified within last 1.5s, skip exit code
-                    if (Date.now() - lastTerminalTime < 1500 && lastTerminalLevel !== null) {
-                        console.log(`[One Piece] Text handled as ${lastTerminalLevel} — skipping exit code`);
-                        return;
-                    }
-                    // Text found nothing — fallback to exit code
-                    console.log(`[One Piece] No text match — using exit code ${exitCode}`);
-                    if (exitCode >= 2) trigger('shanks');
-                    else trigger('katakuri');
-                }, 800);
+                const level = classifyCommand(cmd);
+                console.log(`[One Piece] → ${level}`);
+                trigger(level);
             })
         );
+    } else {
+        console.warn('[One Piece] ⚠️ Shell integration not available');
     }
 
-    // ── 3. Editor diagnostics ─────────────────────────────────────────────────
+    // ── 2. Editor diagnostics — RED errors only ───────────────────────────────
     context.subscriptions.push(
         vscode.languages.onDidChangeDiagnostics((e) => {
             let played = false;
@@ -139,10 +140,8 @@ export function activate(context: vscode.ExtensionContext) {
                 for (const d of vscode.languages.getDiagnostics(uri)) {
                     if (played) break;
                     if (d.severity === vscode.DiagnosticSeverity.Error) {
-                        trigger(classify(d.message) ?? 'katakuri');
-                        played = true;
-                    } else if (d.severity === vscode.DiagnosticSeverity.Warning) {
-                        trigger('luffy');
+                        console.log(`[One Piece] Editor error → katakuri`);
+                        trigger('katakuri');
                         played = true;
                     }
                 }
@@ -150,11 +149,11 @@ export function activate(context: vscode.ExtensionContext) {
         })
     );
 
-    // ── 4. Test command ───────────────────────────────────────────────────────
+    // ── 3. Test command ───────────────────────────────────────────────────────
     context.subscriptions.push(
         vscode.commands.registerCommand('onepieceErrors.test', async () => {
             const pick = await vscode.window.showQuickPick(
-                ['🟢 luffy (warning)', '🟡 katakuri (error)', '🔴 shanks (fatal)'],
+                ['luffy (unknown cmd)', 'katakuri (build/code)', 'shanks (infra/docker)'],
                 { placeHolder: 'Pick a sound to test' }
             );
             if (!pick) return;
